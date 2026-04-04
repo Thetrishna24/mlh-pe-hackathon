@@ -12,6 +12,7 @@ dependencies = [
     "pytest-cov",
     "gunicorn",
     "playhouse>=0.1.0",
+    "flask-limiter>=4.1.1",
 ]
 
 [tool.pytest.ini_options]

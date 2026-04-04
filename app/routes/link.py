@@ -5,7 +5,7 @@ from peewee import IntegrityError
 
 from app.models.link import Link
 from app.validators import validate_url, validate_short_code
-
+from app import limiter
 links_bp = Blueprint("links", __name__)
 
 # Fields we're willing to serialize back to the client.
@@ -18,6 +18,7 @@ def _serialize(link: Link) -> dict:
 
 
 @links_bp.route("/shorten", methods=["POST"])
+@limiter.limit("10 per minute")#(shorten)
 def shorten():
     """
     POST /shorten  {"url": "https://example.com"}

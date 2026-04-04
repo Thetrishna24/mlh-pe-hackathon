@@ -5,6 +5,8 @@
 from flask import Blueprint, jsonify
 from app.database import db
 
+import time
+
 health_bp = Blueprint("health", __name__)
 
 
@@ -14,6 +16,9 @@ def health():
         # Cheapest possible DB round-trip — no table scan
         db.execute_sql("SELECT 1")
         db_status = "ok"
+        start = time.monotonic()
+        db.execute_sql("SELECT 1")
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
     except Exception as e:
         # Log the real error server-side, return sanitized message to client
         print(f"[HEALTH] DB check failed: {e}")
@@ -22,4 +27,4 @@ def health():
     status = "ok" if db_status == "ok" else "degraded"
     http_code = 200 if status == "ok" else 503
 
-    return jsonify({"status": status, "db": db_status}), http_code
+    return jsonify({"status": "ok", "db": "ok", "db_latency_ms": latency_ms, "version": "1.0.0"}), http_code

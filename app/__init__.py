@@ -5,16 +5,19 @@ import os
 from flask import Flask, jsonify
 from dotenv import load_dotenv
 
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 from app.database import db
 from app.models import Link
 
 from peewee import PostgresqlDatabase
 from urllib.parse import urlparse
-
+limiter = Limiter(key_func=get_remote_address, default_limits=["100 per minute"])
 def create_app():
     load_dotenv()
     app = Flask(__name__)
-
+    limiter.init_app(app)
     database_url = os.getenv("DATABASE_URL", "postgresql://localhost/hackathon_db")
     parsed = urlparse(database_url)
     db.initialize(PostgresqlDatabase(
