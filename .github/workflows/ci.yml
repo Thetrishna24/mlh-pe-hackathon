@@ -1,0 +1,37 @@
+# CI blocks merge if any test fails or coverage drops below 70%.
+# "The Gatekeeper" — Silver tier requirement.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest tests/ \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-fail-under=70 \
+            -v
+
+      # Coverage report artifact — upload so judges can download it
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: .coverage

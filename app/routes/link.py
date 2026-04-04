@@ -1,0 +1,91 @@
+# routes/links.py
+from flask import Blueprint, jsonify, request, redirect
+from playhouse.shortcuts import model_to_dict
+from peewee import IntegrityError
+
+from app.models.link import Link
+from app.validators import validate_url, validate_short_code
+
+links_bp = Blueprint("links", __name__)
+
+# Fields we're willing to serialize back to the client.
+# Explicit allowlist — never serialize internal fields by accident.
+_SAFE_FIELDS = {"id", "code", "url", "active"}
+
+
+def _serialize(link: Link) -> dict:
+    return {k: v for k, v in model_to_dict(link).items() if k in _SAFE_FIELDS}
+
+
+@links_bp.route("/shorten", methods=["POST"])
+def shorten():
+    """
+    POST /shorten  {"url": "https://example.com"}
+    → 201 {"id": 1, "code": "aB3xYz12", "url": "...", "active": true}
+
+    Security: validates and sanitizes URL before any DB interaction.
+    Returns 400 on bad input, 409 on duplicate, never a stack trace.
+    """
+    body = request.get_json(silent=True)
+
+    # silent=True means Flask returns None instead of raising on bad JSON
+    if not body or not isinstance(body, dict):
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    raw_url = body.get("url")
+    ok, result = validate_url(raw_url)
+    if not ok:
+        return jsonify({"error": result}), 400
+
+    try:
+        code = Link.generate_code()
+        link = Link.create(url=result, code=code)
+        return jsonify(_serialize(link)), 201
+    except IntegrityError:
+        # DB-level unique constraint fired (race condition safety net)
+        return jsonify({"error": "Could not generate a unique code, please retry"}), 409
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@links_bp.route("/r/<code>", methods=["GET"])
+def redirect_link(code: str):
+    """
+    GET /r/<code>
+    → 302 redirect on active link
+    → 410 Gone if link was deactivated
+    → 404 if code never existed
+
+    Security: code is validated against allowlist before DB query
+    to prevent path traversal or injection attempts via the URL path.
+    """
+    ok, result = validate_short_code(code)
+    if not ok:
+        return jsonify({"error": result}), 400
+
+    try:
+        link = Link.get(Link.code == result)
+    except Link.DoesNotExist:
+        return jsonify({"error": "Short link not found"}), 404
+
+    if not link.active:
+        # 410 Gone: semantically distinct from 404. Client knows it existed.
+        return jsonify({"error": "This link has been deactivated"}), 410
+
+    return redirect(link.url, code=302)
+
+
+@links_bp.route("/links/<int:link_id>", methods=["DELETE"])
+def deactivate_link(link_id: int):
+    """
+    DELETE /links/<id>  — soft-deletes a link (sets active=False).
+    Soft delete preserves audit trail and distinguishes 404 vs 410 on redirect.
+    """
+    try:
+        link = Link.get_by_id(link_id)
+    except Link.DoesNotExist:
+        return jsonify({"error": "Link not found"}), 404
+
+    link.active = False
+    link.save()
+    return jsonify({"message": "Link deactivated", "code": link.code}), 200

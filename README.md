@@ -1,192 +1,64 @@
-# MLH PE Hackathon — Flask + Peewee + PostgreSQL Template
+## What This App Does
 
-A minimal hackathon starter template. You get the scaffolding and database wiring — you build the models, routes, and CSV loading logic.
+A reliability-hardened URL shortener API.
 
-**Stack:** Flask · Peewee ORM · PostgreSQL · uv
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Returns app + DB status. Returns 503 if DB is unreachable. |
+| `/shorten` | POST | Accepts `{"url": "https://..."}`, returns a short code. |
+| `/r/<code>` | GET | Redirects to the original URL (302), or 410 if deactivated. |
+| `/links/<id>` | DELETE | Soft-deactivates a link. |
 
-## **Important**
+## Running Tests
 
-You need to work with around the seed files that you can find in [MLH PE Hackathon](https://mlh-pe-hackathon.com) platform. This will help you build the schema for the database and have some data to do some testing and submit your project for judging. If you need help with this, reach out on Discord or on the Q&A tab on the platform.
-
-## Prerequisites
-
-- **uv** — a fast Python package manager that handles Python versions, virtual environments, and dependencies automatically.
-  Install it with:
-  ```bash
-  # macOS / Linux
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-
-  # Windows (PowerShell)
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-  For other methods see the [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/).
-- PostgreSQL running locally (you can use Docker or a local instance)
-
-## uv Basics
-
-`uv` manages your Python version, virtual environment, and dependencies automatically — no manual `python -m venv` needed.
-
-| Command | What it does |
-|---------|--------------|
-| `uv sync` | Install all dependencies (creates `.venv` automatically) |
-| `uv run <script>` | Run a script using the project's virtual environment |
-| `uv add <package>` | Add a new dependency |
-| `uv remove <package>` | Remove a dependency |
-
-## Quick Start
-
+No database required — tests use SQLite in-memory.
 ```bash
-# 1. Clone the repo
-git clone <repo-url> && cd mlh-pe-hackathon
+uv run pytest tests/ -v
+```
 
-# 2. Install dependencies
-uv sync
+With coverage report:
+```bash
+uv run pytest tests/ --cov=app --cov-report=term-missing -v
+```
 
-# 3. Create the database
-createdb hackathon_db
+## Running the App Locally
+```bash
+# 1. Start the database
+docker compose up -d db
 
-# 4. Configure environment
-cp .env.example .env   # edit if your DB credentials differ
+# 2. Create tables (run once)
+uv run python -c "
+from app.database import db
+from app.models.link import Link
+from peewee import PostgresqlDatabase
 
-# 5. Run the server
+db.initialize(PostgresqlDatabase(
+    'hackathon_db',
+    user='postgres',
+    password='postgres',
+    host='localhost',
+    port=5432
+))
+db.connect()
+db.create_tables([Link])
+db.close()
+print('Tables created.')
+"
+
+# 3. Run the app
 uv run run.py
 
-# 6. Verify
+# 4. Verify
 curl http://localhost:5000/health
-# → {"status":"ok"}
 ```
 
-## Project Structure
-
-```
-mlh-pe-hackathon/
-├── app/
-│   ├── __init__.py          # App factory (create_app)
-│   ├── database.py          # DatabaseProxy, BaseModel, connection hooks
-│   ├── models/
-│   │   └── __init__.py      # Import your models here
-│   └── routes/
-│       └── __init__.py      # register_routes() — add blueprints here
-├── .env.example             # DB connection template
-├── .gitignore               # Python + uv gitignore
-├── .python-version          # Pin Python version for uv
-├── pyproject.toml           # Project metadata + dependencies
-├── run.py                   # Entry point: uv run run.py
-└── README.md
+## Running in Production (Docker)
+```bash
+docker compose up --build
 ```
 
-## How to Add a Model
+The app container has `restart: always` — if the process crashes, Docker restarts it automatically.
 
-1. Create a file in `app/models/`, e.g. `app/models/product.py`:
+## CI
 
-```python
-from peewee import CharField, DecimalField, IntegerField
-
-from app.database import BaseModel
-
-
-class Product(BaseModel):
-    name = CharField()
-    category = CharField()
-    price = DecimalField(decimal_places=2)
-    stock = IntegerField()
-```
-
-2. Import it in `app/models/__init__.py`:
-
-```python
-from app.models.product import Product
-```
-
-3. Create the table (run once in a Python shell or a setup script):
-
-```python
-from app.database import db
-from app.models.product import Product
-
-db.create_tables([Product])
-```
-
-## How to Add Routes
-
-1. Create a blueprint in `app/routes/`, e.g. `app/routes/products.py`:
-
-```python
-from flask import Blueprint, jsonify
-from playhouse.shortcuts import model_to_dict
-
-from app.models.product import Product
-
-products_bp = Blueprint("products", __name__)
-
-
-@products_bp.route("/products")
-def list_products():
-    products = Product.select()
-    return jsonify([model_to_dict(p) for p in products])
-```
-
-2. Register it in `app/routes/__init__.py`:
-
-```python
-def register_routes(app):
-    from app.routes.products import products_bp
-    app.register_blueprint(products_bp)
-```
-
-## How to Load CSV Data
-
-```python
-import csv
-from peewee import chunked
-from app.database import db
-from app.models.product import Product
-
-def load_csv(filepath):
-    with open(filepath, newline="") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-
-    with db.atomic():
-        for batch in chunked(rows, 100):
-            Product.insert_many(batch).execute()
-```
-
-## Useful Peewee Patterns
-
-```python
-from peewee import fn
-from playhouse.shortcuts import model_to_dict
-
-# Select all
-products = Product.select()
-
-# Filter
-cheap = Product.select().where(Product.price < 10)
-
-# Get by ID
-p = Product.get_by_id(1)
-
-# Create
-Product.create(name="Widget", category="Tools", price=9.99, stock=50)
-
-# Convert to dict (great for JSON responses)
-model_to_dict(p)
-
-# Aggregations
-avg_price = Product.select(fn.AVG(Product.price)).scalar()
-total = Product.select(fn.SUM(Product.stock)).scalar()
-
-# Group by
-from peewee import fn
-query = (Product
-         .select(Product.category, fn.COUNT(Product.id).alias("count"))
-         .group_by(Product.category))
-```
-
-## Tips
-
-- Use `model_to_dict` from `playhouse.shortcuts` to convert model instances to dictionaries for JSON responses.
-- Wrap bulk inserts in `db.atomic()` for transactional safety and performance.
-- The template uses `teardown_appcontext` for connection cleanup, so connections are closed even when requests fail.
-- Check `.env.example` for all available configuration options.
+GitHub Actions runs the full test suite on every push. Deploys are blocked if any test fails or coverage drops below 70%.
