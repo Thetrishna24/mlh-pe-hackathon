@@ -75,6 +75,13 @@ def create_app():
     def method_not_allowed(e):
         return jsonify({"error": "Method not allowed"}), 405
 
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        return jsonify({
+            "error": "Rate limit exceeded",
+            "message": str(e.description)
+        }), 429
+
     @app.errorhandler(500)
     def internal_error(e):
         # Log real error server-side; return sanitized message to client

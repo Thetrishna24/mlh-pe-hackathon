@@ -99,3 +99,24 @@ def deactivate_link(link_id: int):
     link.save()
     logger.info(f"Link deactivated: id={link_id} code={link.code}")
     return jsonify({"message": "Link deactivated", "code": link.code}), 200
+
+@links_bp.route("/links", methods=["GET"])
+def list_links():
+    """
+    GET /links
+    → 200 [{"id": 1, "code": "...", "url": "...", "active": true}, ...]
+
+    Retrieves all currently active links. 
+    Observability: Logs the access for audit purposes.
+    """
+    try:
+        # We only want to show active links to keep the list clean
+        links = Link.select().where(Link.active == True)
+        
+        # Log that the directory was accessed
+        logger.info(f"List links accessed: count={len(links)}")
+        
+        return jsonify([_serialize(l) for l in links]), 200
+    except Exception as e:
+        logger.error(f"Failed to retrieve links list: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500

@@ -42,6 +42,16 @@ class TestShorten:
         body = res.get_data(as_text=True)
         assert "Traceback" not in body
         assert "peewee" not in body
+    def test_shorten_rate_limit_exceeded(self, client):
+        # We set a limit of 10 per minute. Let's hit it 11 times.
+        url = {"url": "https://test.com"}
+        for _ in range(10):
+            client.post("/shorten", json=url)
+        
+        # The 11th should trigger the rate limiter
+        res = client.post("/shorten", json=url)
+        assert res.status_code == 429
+        assert "Rate limit exceeded" in res.get_json()["error"]
 
 
 class TestRedirect:
@@ -99,3 +109,22 @@ class TestGlobalErrorHandlers:
         res = client.delete("/health")
         assert res.status_code == 405
         assert res.get_json()["error"] is not None
+
+class TestList:
+    def test_list_links_returns_active_only(self, client):
+        # 1. Create two links
+        c1 = client.post("/shorten", json={"url": "https://a.com"}).get_json()
+        c2 = client.post("/shorten", json={"url": "https://b.com"}).get_json()
+
+        # 2. Deactivate one
+        client.delete(f"/links/{c1['id']}")
+
+        # 3. Check the list
+        res = client.get("/links")
+        assert res.status_code == 200
+        data = res.get_json()
+        
+        # Should only see the one that is still active
+        assert len(data) >= 1 
+        assert any(link["id"] == c2["id"] for link in data)
+        assert not any(link["id"] == c1["id"] for link in data)
