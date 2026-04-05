@@ -45,12 +45,14 @@ def shorten():
     try:
         code = Link.generate_code()
         link = Link.create(url=result, code=code)
+        logger.info(f"Link created: code={code} url={result}")
         return jsonify(_serialize(link)), 201
     except IntegrityError:
         # DB-level unique constraint fired (race condition safety net)
+        logger.warning(f"Collision detected on code generation for URL: {result}")
         return jsonify({"error": "Could not generate a unique code, please retry"}), 409
     except RuntimeError as e:
-        
+        logger.error(f"System failure during link creation: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -72,12 +74,13 @@ def redirect_link(code: str):
     try:
         link = Link.get(Link.code == result)
     except Link.DoesNotExist:
+        logger.info(f"Redirect failed: code={result} not found")
         return jsonify({"error": "Short link not found"}), 404
 
     if not link.active:
         # 410 Gone: semantically distinct from 404. Client knows it existed.
         return jsonify({"error": "This link has been deactivated"}), 410
-
+    logger.info(f"Redirecting: code={result} -> target={link.url}")
     return redirect(link.url, code=302)
 
 
@@ -94,4 +97,5 @@ def deactivate_link(link_id: int):
 
     link.active = False
     link.save()
+    logger.info(f"Link deactivated: id={link_id} code={link.code}")
     return jsonify({"message": "Link deactivated", "code": link.code}), 200
