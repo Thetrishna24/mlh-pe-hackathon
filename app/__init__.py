@@ -13,8 +13,32 @@ from app.models import Link
 
 from peewee import PostgresqlDatabase
 from urllib.parse import urlparse
+
+import logging
+import json
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_record = {
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "module": record.module,
+            "timestamp": self.formatTime(record, self.datefmt),
+        }
+        return json.dumps(log_record)
+
+def setup_logging():
+    handler = logging.StreamHandler()
+    handler.setFormatter(JSONFormatter())
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    # Prevent duplicate logs if create_app is called multiple times (like in tests)
+    logger.propagate = False
+
 limiter = Limiter(key_func=get_remote_address, default_limits=["100 per minute"])
 def create_app():
+    setup_logging() # Initialize the structured logs
     load_dotenv()
     app = Flask(__name__)
     limiter.init_app(app)
