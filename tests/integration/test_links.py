@@ -64,6 +64,20 @@ class TestShorten:
         res2 = client.post("/shorten", json=url)
         assert res2.status_code == 200
         assert res2.get_json()["code"] == code1
+    def test_shorten_reactivates_deleted_url(self, client):
+        url = {"url": "https://resurrect.com"}
+        
+        # 1. Create and then Delete
+        create = client.post("/shorten", json=url).get_json()
+        client.delete(f"/links/{create['id']}")
+        
+        # 2. Shorten the same URL again
+        res = client.post("/shorten", json=url)
+        data = res.get_json()
+        
+        assert res.status_code == 200
+        assert data["id"] == create["id"]  # Same ID!
+        assert data["active"] is True      # It's back!
 
 
 class TestRedirect:

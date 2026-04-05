@@ -47,6 +47,13 @@ def shorten():
         logger.info(f"Existing link found for URL: {result} -> code={existing.code}")
         return jsonify(_serialize(existing)), 200 # Note: 200 OK, not 201 Created
     # ---------------------------
+    inactive = Link.get_or_none(Link.url == result, Link.active == False)
+    if inactive:
+        inactive.active = True
+        inactive.save()
+        logger.info(f"Reactivated existing link: {result} -> {inactive.code}")
+        return jsonify(_serialize(inactive)), 200 # Or 201, but 200 is cleaner for "updates"
+    # ---------------------------
     try:
         code = Link.generate_code()
         link = Link.create(url=result, code=code)
