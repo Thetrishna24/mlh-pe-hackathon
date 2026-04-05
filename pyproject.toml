@@ -8,4 +8,18 @@ dependencies = [
     "peewee>=3.17",
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.0",
+    "pytest",
+    "pytest-cov",
+    "gunicorn",
+    "playhouse>=0.1.0",
+    "flask-limiter>=4.1.1",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["tests/*"]
