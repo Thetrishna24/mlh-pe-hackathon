@@ -52,6 +52,18 @@ class TestShorten:
         res = client.post("/shorten", json=url)
         assert res.status_code == 429
         assert "Rate limit exceeded" in res.get_json()["error"]
+    def test_shorten_returns_existing_code_for_duplicate_url(self, client):
+        url = {"url": "https://unique-check.com"}
+        
+        # First request creates it
+        res1 = client.post("/shorten", json=url)
+        assert res1.status_code == 201
+        code1 = res1.get_json()["code"]
+
+        # Second request should return the SAME code
+        res2 = client.post("/shorten", json=url)
+        assert res2.status_code == 200
+        assert res2.get_json()["code"] == code1
 
 
 class TestRedirect:

@@ -41,7 +41,12 @@ def shorten():
     ok, result = validate_url(raw_url)
     if not ok:
         return jsonify({"error": result}), 400
-
+    # Check if we already have an active short link for this exact URL
+    existing = Link.get_or_none(Link.url == result, Link.active == True)
+    if existing:
+        logger.info(f"Existing link found for URL: {result} -> code={existing.code}")
+        return jsonify(_serialize(existing)), 200 # Note: 200 OK, not 201 Created
+    # ---------------------------
     try:
         code = Link.generate_code()
         link = Link.create(url=result, code=code)
